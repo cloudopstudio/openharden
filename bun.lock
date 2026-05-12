@@ -295,6 +295,72 @@
         "typescript": "catalog:",
       },
     },
+    "packages/oh-gateway": {
+      "name": "@openharden/gateway",
+      "version": "0.0.1",
+      "dependencies": {
+        "@opencode-ai/sdk": "workspace:*",
+        "@openharden/instances": "workspace:*",
+        "@openharden/resolver": "workspace:*",
+        "@openharden/shared": "workspace:*",
+        "@openharden/telegram": "workspace:*",
+      },
+      "devDependencies": {
+        "@types/node": "catalog:",
+        "@typescript/native-preview": "catalog:",
+        "typescript": "catalog:",
+      },
+    },
+    "packages/oh-instances": {
+      "name": "@openharden/instances",
+      "version": "0.0.1",
+      "dependencies": {
+        "@opencode-ai/sdk": "workspace:*",
+        "@openharden/shared": "workspace:*",
+      },
+      "devDependencies": {
+        "@types/node": "catalog:",
+        "@typescript/native-preview": "catalog:",
+        "typescript": "catalog:",
+      },
+    },
+    "packages/oh-resolver": {
+      "name": "@openharden/resolver",
+      "version": "0.0.1",
+      "dependencies": {
+        "@openharden/shared": "workspace:*",
+        "zod": "catalog:",
+      },
+      "devDependencies": {
+        "@types/node": "catalog:",
+        "@typescript/native-preview": "catalog:",
+        "typescript": "catalog:",
+      },
+    },
+    "packages/oh-shared": {
+      "name": "@openharden/shared",
+      "version": "0.0.1",
+      "dependencies": {
+        "zod": "catalog:",
+      },
+      "devDependencies": {
+        "@types/node": "catalog:",
+        "@typescript/native-preview": "catalog:",
+        "typescript": "catalog:",
+      },
+    },
+    "packages/oh-telegram": {
+      "name": "@openharden/telegram",
+      "version": "0.0.1",
+      "dependencies": {
+        "@openharden/shared": "workspace:*",
+      },
+      "devDependencies": {
+        "@types/node": "catalog:",
+        "@typescript/native-preview": "catalog:",
+        "typescript": "catalog:",
+      },
+    },
     "packages/opencode": {
       "name": "opencode",
       "version": "1.3.10",
@@ -1456,6 +1522,16 @@
     "@opencode-ai/util": ["@opencode-ai/util@workspace:packages/util"],
 
     "@opencode-ai/web": ["@opencode-ai/web@workspace:packages/web"],
+
+    "@openharden/gateway": ["@openharden/gateway@workspace:packages/oh-gateway"],
+
+    "@openharden/instances": ["@openharden/instances@workspace:packages/oh-instances"],
+
+    "@openharden/resolver": ["@openharden/resolver@workspace:packages/oh-resolver"],
+
+    "@openharden/shared": ["@openharden/shared@workspace:packages/oh-shared"],
+
+    "@openharden/telegram": ["@openharden/telegram@workspace:packages/oh-telegram"],
 
     "@openrouter/ai-sdk-provider": ["@openrouter/ai-sdk-provider@2.3.3", "", { "peerDependencies": { "ai": "^6.0.0", "zod": "^3.25.0 || ^4.0.0" } }, "sha512-4fVteGkVedc7fGoA9+qJs4tpYwALezMq14m2Sjub3KmyRlksCbK+WJf67NPdGem8+NZrV2tAN42A1NU3+SiV3w=="],
 
@@ -3041,7 +3117,7 @@
 
     "get-tsconfig": ["get-tsconfig@4.13.6", "", { "dependencies": { "resolve-pkg-maps": "^1.0.0" } }, "sha512-shZT/QMiSHc/YBLxxOkMtgSid5HFoauqCE3/exfsEcwg1WkeqjG+V40yBbBrsD+jW2HDXcs28xOfcbm2jI8Ddw=="],
 
-    "ghostty-web": ["ghostty-web@github:anomalyco/ghostty-web#4af877d", {}, "anomalyco-ghostty-web-4af877d", "sha512-fbEK8mtr7ar4ySsF+JUGjhaZrane7dKphanN+SxHt5XXI6yLMAh/Hpf6sNCOyyVa2UlGCd7YpXG/T2v2RUAX+A=="],
+    "ghostty-web": ["ghostty-web@github:anomalyco/ghostty-web#20bd361", {}, "anomalyco-ghostty-web-20bd361", "sha512-dW0nwaiBBcun9y5WJSvm3HxDLe5o9V0xLCndQvWonRVubU8CS1PHxZpLffyPt1YujPWC13ez03aWxcuKBPYYGQ=="],
 
     "gifwrap": ["gifwrap@0.10.1", "", { "dependencies": { "image-q": "^4.0.0", "omggif": "^1.0.10" } }, "sha512-2760b1vpJHNmLzZ/ubTtNnEx5WApN/PYWJvXvgS+tL1egTTthayFYIQQNi136FLEDcN/IyEY2EcGpIITD6eYUw=="],
 

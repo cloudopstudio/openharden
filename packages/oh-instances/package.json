@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@openharden/instances",
+  "version": "0.0.1",
+  "description": "Pool de instancias de OpenCode con LRU eviction, idle timeout y cold-start buffering",
+  "type": "module",
+  "license": "MIT",
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsgo --noEmit"
+  },
+  "dependencies": {
+    "@openharden/shared": "workspace:*",
+    "@opencode-ai/sdk": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "@typescript/native-preview": "catalog:"
+  }
+}

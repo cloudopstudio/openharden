@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@openharden/gateway",
+  "version": "0.0.1",
+  "description": "Daemon orquestador de openharden. Carga canales, parsea comandos y enruta a sesiones de OpenCode",
+  "type": "module",
+  "license": "MIT",
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "dev": "bun run src/index.ts",
+    "typecheck": "tsgo --noEmit"
+  },
+  "dependencies": {
+    "@openharden/shared": "workspace:*",
+    "@openharden/resolver": "workspace:*",
+    "@openharden/instances": "workspace:*",
+    "@openharden/telegram": "workspace:*",
+    "@opencode-ai/sdk": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "@typescript/native-preview": "catalog:"
+  }
+}
