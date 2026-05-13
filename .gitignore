@@ -29,3 +29,12 @@ UPCOMING_CHANGELOG.md
 logs/
 *.bun-build
 tsconfig.tsbuildinfo
+
+# openharden local secrets and configs
+openharden.config.json
+openharden.config.*.json
+
+# iCloud Drive sync conflicts
+* 2.ts
+* 2.tsx
+* 2.json
