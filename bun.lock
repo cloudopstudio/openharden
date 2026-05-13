@@ -295,11 +295,26 @@
         "typescript": "catalog:",
       },
     },
+    "packages/oh-dispatcher": {
+      "name": "@openharden/dispatcher",
+      "version": "0.0.1",
+      "dependencies": {
+        "@opencode-ai/sdk": "workspace:*",
+        "@openharden/shared": "workspace:*",
+      },
+      "devDependencies": {
+        "@types/bun": "catalog:",
+        "@types/node": "catalog:",
+        "@typescript/native-preview": "catalog:",
+        "typescript": "catalog:",
+      },
+    },
     "packages/oh-gateway": {
       "name": "@openharden/gateway",
       "version": "0.0.1",
       "dependencies": {
         "@opencode-ai/sdk": "workspace:*",
+        "@openharden/dispatcher": "workspace:*",
         "@openharden/instances": "workspace:*",
         "@openharden/resolver": "workspace:*",
         "@openharden/shared": "workspace:*",
@@ -1525,6 +1540,8 @@
     "@opencode-ai/util": ["@opencode-ai/util@workspace:packages/util"],
 
     "@opencode-ai/web": ["@opencode-ai/web@workspace:packages/web"],
+
+    "@openharden/dispatcher": ["@openharden/dispatcher@workspace:packages/oh-dispatcher"],
 
     "@openharden/gateway": ["@openharden/gateway@workspace:packages/oh-gateway"],
 

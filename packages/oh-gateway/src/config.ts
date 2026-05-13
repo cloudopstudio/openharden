@@ -23,6 +23,19 @@ const Skill = z
   })
   .refine((s) => s.path || s.url, { message: "skill must declare either path or url" })
 
+const Logging = z.object({
+  level: z.enum(["meta", "raw"]).default("meta"),
+  path: z.string().optional(),
+})
+export type Logging = z.infer<typeof Logging>
+
+const Dispatcher = z.object({
+  enabled: z.boolean().default(true),
+  model: z.string().default("openai/gpt-5-mini"),
+  historyTurns: z.number().int().positive().default(10),
+})
+export type Dispatcher = z.infer<typeof Dispatcher>
+
 const Telegram = z.discriminatedUnion("mode", [
   z.object({
     mode: z.literal("polling"),
@@ -51,6 +64,8 @@ export const Config = z.object({
   mcps: z.record(z.string(), z.record(z.string(), z.unknown())).default({}),
   agents: z.record(z.string(), z.record(z.string(), z.unknown())).default({}),
   skills: z.record(z.string(), Skill).default({}),
+  logging: Logging.optional(),
+  dispatcher: Dispatcher.optional(),
   telegram: Telegram.optional(),
 })
 export type Config = z.infer<typeof Config>

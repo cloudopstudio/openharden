@@ -19,6 +19,7 @@
     "@openharden/resolver": "workspace:*",
     "@openharden/instances": "workspace:*",
     "@openharden/telegram": "workspace:*",
+    "@openharden/dispatcher": "workspace:*",
     "@opencode-ai/sdk": "workspace:*",
     "zod": "catalog:"
   },

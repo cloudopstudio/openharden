@@ -1,13 +1,16 @@
 #!/usr/bin/env bun
+import fs from "node:fs/promises"
 import path from "node:path"
 import { createInterface } from "node:readline/promises"
 import { create as createPool, type Reason } from "@openharden/instances"
 import { create as createResolver } from "@openharden/resolver"
 import { create as createTelegram, type Adapter } from "@openharden/telegram"
+import { create as createDispatcher, type CurrentState, type Dispatcher, type HistoryTurn } from "@openharden/dispatcher"
 import { Channel, messages, type Handler, type Reply, type Signal } from "@openharden/shared"
 import { parse } from "./parser"
 import { load } from "./config"
 import { buildSpawnConfig, loadGlobalCatalog } from "./opencode-global"
+import { create as createLogger } from "./logging"
 import * as handlers from "./handlers"
 
 const configPath = process.env.OPENHARDEN_CONFIG ?? "./openharden.config.json"
@@ -17,6 +20,12 @@ const log = (msg: string) => console.log(`[gateway] ${msg}`)
 const main = async () => {
   const cfg = await load(configPath)
   log(`config loaded from ${configPath} (defaultProject=${cfg.defaultProject}, max=${cfg.max}, bindings=${cfg.bindings.length})`)
+
+  const logger = await createLogger({
+    level: cfg.logging?.level ?? "meta",
+    path: cfg.logging?.path,
+  })
+  log(`logging level=${logger.level} path=${logger.path}`)
 
   const resolver = createResolver({
     defaultProject: cfg.defaultProject,
@@ -79,17 +88,151 @@ const main = async () => {
 
   const deps = { pool, resolver }
 
+  let dispatcher: Dispatcher | null = null
+  if (cfg.dispatcher?.enabled !== false && cfg.workspaceRoot) {
+    try {
+      dispatcher = await createDispatcher({
+        model: cfg.dispatcher?.model ?? "openai/gpt-5-mini",
+        workspaceRoot: cfg.workspaceRoot,
+      })
+      log(`dispatcher ready (model=${cfg.dispatcher?.model ?? "openai/gpt-5-mini"})`)
+    } catch (err) {
+      log(`dispatcher failed to start: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  } else if (!cfg.workspaceRoot) {
+    log(`dispatcher disabled: no workspaceRoot configured`)
+  }
+
+  const historyMax = (cfg.dispatcher?.historyTurns ?? 10) * 2
+  const historyByIdentity = new Map<string, HistoryTurn[]>()
+
+  const listFolders = async (): Promise<string[]> => {
+    if (!cfg.workspaceRoot) return []
+    try {
+      const entries = await fs.readdir(cfg.workspaceRoot, { withFileTypes: true })
+      return entries
+        .filter((e) => e.isDirectory() && !e.name.startsWith("."))
+        .map((e) => e.name)
+        .sort()
+    } catch {
+      return []
+    }
+  }
+
+  const orgFromFolder = (folder: string | null): string | null => {
+    if (!folder) return null
+    const idx = folder.indexOf("-")
+    if (idx <= 0) return null
+    const candidate = folder.slice(0, idx)
+    return cfg.organizations[candidate] ? candidate : null
+  }
+
+  const stateFor = async (identityId: string): Promise<CurrentState> => {
+    const current = await resolver.currentProject(identityId)
+    if (!current || current === cfg.defaultProject) {
+      return { organization: null, folder: null, engramProject: null }
+    }
+    const org = orgFromFolder(current)
+    return {
+      organization: org,
+      folder: current,
+      engramProject: org ? (cfg.organizations[org]?.engramProject ?? null) : null,
+    }
+  }
+
+  const orgList = () =>
+    Object.entries(cfg.organizations).map(([name, c]) => ({
+      name,
+      engramProject: c.engramProject ?? null,
+    }))
+
   const handle: Handler = async (signal, reply) => {
     const ctx = await resolver.resolve(signal).catch(() => null)
-    if (!ctx) return messages.unbound
+    const identity = ctx?.identity.id ?? signal.from
+    const project = ctx?.project ?? null
+
+    await logger
+      .write({ identity, channel: signal.channel, project, action: "incoming", text: signal.text })
+      .catch(() => {})
+
+    if (!ctx) {
+      await logger
+        .write({ identity, channel: signal.channel, project, action: "error", detail: { reason: "unbound" } })
+        .catch(() => {})
+      return messages.unbound
+    }
 
     const cmd = await parse(signal)
-    if (cmd.kind === "route") return handlers.route(deps, ctx, cmd.text, reply)
-    if (cmd.kind === "switch") return handlers.switchProject(deps, ctx, cmd.project, reply)
-    if (cmd.kind === "close") return handlers.close(deps, ctx, cmd.project)
-    if (cmd.kind === "list") return handlers.list(deps, ctx)
-    if (cmd.kind === "summary") return handlers.summary(deps, ctx, reply)
-    return null
+    let response: string | null = null
+
+    if (cmd.kind === "close") {
+      await logger
+        .write({ identity, channel: signal.channel, project, action: "close", detail: { target: cmd.project ?? project } })
+        .catch(() => {})
+      response = await handlers.close(deps, ctx, cmd.project)
+    } else if (cmd.kind === "list") {
+      response = await handlers.list(deps, ctx)
+    } else if (cmd.kind === "summary") {
+      response = await handlers.summary(deps, ctx, reply)
+    } else if (dispatcher) {
+      const currentState = await stateFor(identity)
+      const folders = await listFolders()
+      const history = historyByIdentity.get(identity) ?? []
+      const decision = await dispatcher.decide({
+        message: signal.text,
+        currentState,
+        organizations: orgList(),
+        folders,
+        history,
+      })
+      await logger
+        .write({
+          identity,
+          channel: signal.channel,
+          project,
+          action: "dispatcher",
+          detail: { action: decision.action, folder: decision.folder, organization: decision.organization },
+        })
+        .catch(() => {})
+
+      const newHistory = [
+        ...history,
+        { role: "user" as const, text: signal.text },
+        ...(decision.message ? [{ role: "assistant" as const, text: decision.message }] : []),
+      ].slice(-historyMax)
+      historyByIdentity.set(identity, newHistory)
+
+      if (decision.action === "switch" && decision.folder) {
+        await resolver.switchProject(identity, decision.folder)
+        await deps.pool.close({ identity, project: ctx.project }).catch(() => null)
+        response = decision.message ?? messages.spawned(decision.folder)
+      } else if (decision.action === "route") {
+        const folder = decision.folder ?? currentState.folder
+        if (!folder) {
+          response = "No tengo un proyecto activo. ¿En cuál querés trabajar?"
+        } else {
+          const routeCtx = { ...ctx, project: folder }
+          response = await handlers.route(deps, routeCtx, signal.text, reply)
+        }
+      } else {
+        // ask | unknown
+        response = decision.message
+      }
+    } else if (cmd.kind === "switch") {
+      await logger
+        .write({ identity, channel: signal.channel, project, action: "switch", detail: { to: cmd.project } })
+        .catch(() => {})
+      response = await handlers.switchProject(deps, ctx, cmd.project, reply)
+    } else if (cmd.kind === "route") {
+      response = await handlers.route(deps, ctx, cmd.text, reply)
+    }
+
+    if (response) {
+      await logger
+        .write({ identity, channel: signal.channel, project, action: "response", response })
+        .catch(() => {})
+    }
+    return response
   }
 
   const adapters: Adapter[] = []
@@ -103,6 +246,7 @@ const main = async () => {
   const shutdown = async () => {
     log("shutting down...")
     for (const a of adapters) await a.stop().catch((err) => log(`adapter stop error: ${err}`))
+    if (dispatcher) await dispatcher.shutdown().catch(() => {})
     await pool.shutdown()
     process.exit(0)
   }

@@ -1,0 +1,127 @@
+import { createOpencode } from "@opencode-ai/sdk"
+import { SYSTEM_PROMPT } from "./prompt"
+
+export type Organization = { name: string; engramProject: string | null }
+
+export type CurrentState = {
+  organization: string | null
+  folder: string | null
+  engramProject: string | null
+}
+
+export type HistoryTurn = { role: "user" | "assistant"; text: string }
+
+export type DispatchInput = {
+  message: string
+  currentState: CurrentState
+  organizations: Organization[]
+  folders: string[]
+  history: HistoryTurn[]
+}
+
+export type Decision = {
+  action: "route" | "switch" | "ask" | "unknown"
+  organization: string | null
+  folder: string | null
+  engramProject: string | null
+  message: string | null
+}
+
+export type Options = {
+  model: string
+  workspaceRoot?: string
+  signal?: AbortSignal
+}
+
+export type Dispatcher = {
+  decide(input: DispatchInput): Promise<Decision>
+  shutdown(): Promise<void>
+}
+
+const parseModel = (s: string): { providerID: string; modelID: string } => {
+  const idx = s.indexOf("/")
+  if (idx <= 0 || idx === s.length - 1) {
+    throw new Error(`invalid dispatcher model "${s}", expected format "<provider>/<model>"`)
+  }
+  return { providerID: s.slice(0, idx), modelID: s.slice(idx + 1) }
+}
+
+const extractText = (data: unknown): string | null => {
+  if (!data || typeof data !== "object") return null
+  const parts = (data as Record<string, unknown>).parts
+  if (!Array.isArray(parts)) return null
+  const texts = parts
+    .filter((p): p is Record<string, unknown> => p && typeof p === "object" && (p as Record<string, unknown>).type === "text")
+    .map((p) => p.text)
+    .filter((t): t is string => typeof t === "string" && t.length > 0)
+  return texts.length > 0 ? texts.join("\n") : null
+}
+
+const tryParseDecision = (text: string): Decision | null => {
+  const start = text.indexOf("{")
+  const end = text.lastIndexOf("}")
+  if (start === -1 || end === -1 || end < start) return null
+  const candidate = text.slice(start, end + 1)
+  try {
+    const obj = JSON.parse(candidate) as Record<string, unknown>
+    if (!obj || typeof obj !== "object") return null
+    const action = obj.action
+    if (action !== "route" && action !== "switch" && action !== "ask" && action !== "unknown") return null
+    return {
+      action,
+      organization: typeof obj.organization === "string" ? obj.organization : null,
+      folder: typeof obj.folder === "string" ? obj.folder : null,
+      engramProject: typeof obj.engramProject === "string" ? obj.engramProject : null,
+      message: typeof obj.message === "string" ? obj.message : null,
+    }
+  } catch {
+    return null
+  }
+}
+
+const unknown = (message: string): Decision => ({
+  action: "unknown",
+  organization: null,
+  folder: null,
+  engramProject: null,
+  message,
+})
+
+export const create = async (opts: Options): Promise<Dispatcher> => {
+  const model = parseModel(opts.model)
+  const oc = await createOpencode({
+    port: 0,
+    signal: opts.signal,
+    cwd: opts.workspaceRoot,
+  })
+
+  const session = await oc.client.session.create({ body: { title: "openharden-dispatcher" } })
+  if (session.error) {
+    oc.server.close()
+    throw new Error(`dispatcher session.create failed: ${JSON.stringify(session.error)}`)
+  }
+  const sessionId = session.data.id
+
+  return {
+    async decide(input) {
+      const payload = JSON.stringify(input)
+      const r = await oc.client.session.prompt({
+        path: { id: sessionId },
+        body: {
+          model,
+          system: SYSTEM_PROMPT,
+          parts: [{ type: "text", text: payload }],
+        },
+      })
+      if (r.error) return unknown(`Dispatcher transport error: ${JSON.stringify(r.error)}`)
+      const text = extractText(r.data)
+      if (!text) return unknown("Dispatcher devolvió respuesta vacía.")
+      const decision = tryParseDecision(text)
+      if (!decision) return unknown(`Dispatcher devolvió formato inválido: ${text.slice(0, 120)}`)
+      return decision
+    },
+    async shutdown() {
+      oc.server.close()
+    },
+  }
+}
