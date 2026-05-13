@@ -44,13 +44,20 @@ const lifecycleTest = async () => {
   await pool.awaitReady(gamma.key)
 
   const after = pool.list().map((i) => i.key.project)
-  const ok =
+  const lru =
     after.length === 2 &&
     after.includes("beta") &&
     after.includes("gamma") &&
     !after.includes("alpha") &&
     alpha2.sessionId === alpha.sessionId
-  log(ok ? "LIFECYCLE OK" : "LIFECYCLE FAIL", after)
+
+  log("close beta (explicit)")
+  const closed = await pool.close(beta.key)
+  const remaining = pool.list().map((i) => i.key.project)
+  const closeOk = closed?.key.project === "beta" && remaining.length === 1 && remaining[0] === "gamma"
+
+  const ok = lru && closeOk
+  log(ok ? "LIFECYCLE OK" : "LIFECYCLE FAIL", { after, closed: closed?.key.project, remaining })
 
   await pool.shutdown()
   return ok

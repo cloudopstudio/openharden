@@ -27,6 +27,7 @@ export type Pool = {
   awaitReady(key: InstanceKey): Promise<void>
   client(key: InstanceKey): Client
   release(key: InstanceKey): Promise<void>
+  close(key: InstanceKey): Promise<Instance | null>
   list(): Instance[]
   evict(): Promise<Instance | null>
   shutdown(): Promise<void>
@@ -154,6 +155,13 @@ export const create = (opts: Options): Pool => {
       if (!rt) return
       rt.instance.lastSeen = Date.now()
       if (rt.instance.state === "ready") arm(rt)
+    },
+    async close(key) {
+      const rt = pool.get(id(key))
+      if (!rt) return null
+      const snap = { ...rt.instance }
+      await shut(rt, "evict")
+      return snap
     },
     list() {
       return Array.from(pool.values()).map((rt) => rt.instance)
