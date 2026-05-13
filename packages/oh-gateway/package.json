@@ -11,16 +11,20 @@
   },
   "scripts": {
     "dev": "bun run src/index.ts",
+    "parser-smoke": "bun run src/parser/smoke.ts",
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.65.0",
     "@openharden/shared": "workspace:*",
     "@openharden/resolver": "workspace:*",
     "@openharden/instances": "workspace:*",
     "@openharden/telegram": "workspace:*",
-    "@opencode-ai/sdk": "workspace:*"
+    "@opencode-ai/sdk": "workspace:*",
+    "zod": "catalog:"
   },
   "devDependencies": {
+    "@types/bun": "catalog:",
     "@types/node": "catalog:",
     "typescript": "catalog:",
     "@typescript/native-preview": "catalog:"
