@@ -10,17 +10,25 @@ export type Deps = {
   resolver: Resolver
 }
 
-const extract = (data: unknown): string | null => {
+const extractError = (data: unknown): string | null => {
   if (!data || typeof data !== "object") return null
-  const d = data as Record<string, unknown>
-  const info = d.info as Record<string, unknown> | undefined
-  if (info && typeof info.content === "string" && info.content) return info.content
-  const parts = d.parts
+  const info = (data as Record<string, unknown>).info as Record<string, unknown> | undefined
+  if (!info || !info.error || typeof info.error !== "object") return null
+  const err = info.error as Record<string, unknown>
+  const name = typeof err.name === "string" ? err.name : "error"
+  const payload = err.data as Record<string, unknown> | undefined
+  const message = payload && typeof payload.message === "string" ? payload.message : null
+  return message ? `[${name}] ${message}` : `[${name}]`
+}
+
+const extractText = (data: unknown): string | null => {
+  if (!data || typeof data !== "object") return null
+  const parts = (data as Record<string, unknown>).parts
   if (!Array.isArray(parts)) return null
   const texts = parts
     .filter((p): p is Record<string, unknown> => p && typeof p === "object" && (p as Record<string, unknown>).type === "text")
     .map((p) => p.text)
-    .filter((t): t is string => typeof t === "string")
+    .filter((t): t is string => typeof t === "string" && t.length > 0)
   return texts.length > 0 ? texts.join("\n") : null
 }
 
@@ -29,8 +37,10 @@ const send = async (deps: Deps, key: InstanceKey, sessionId: string, text: strin
     path: { id: sessionId },
     body: { parts: [{ type: "text", text }] },
   })
-  if (result.error) return "(error procesando el mensaje)"
-  return extract(result.data) ?? "(sin respuesta)"
+  if (result.error) return `(error de transporte: ${JSON.stringify(result.error)})`
+  const err = extractError(result.data)
+  if (err) return err
+  return extractText(result.data) ?? "(el modelo no devolvió texto)"
 }
 
 export const route = async (deps: Deps, ctx: Context, text: string, notify: Notify): Promise<string | null> => {
