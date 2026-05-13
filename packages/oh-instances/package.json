@@ -10,6 +10,7 @@
     ".": "./src/index.ts"
   },
   "scripts": {
+    "smoke": "bun run src/smoke.ts",
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {
