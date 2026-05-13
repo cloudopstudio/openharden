@@ -358,6 +358,7 @@
         "@openharden/shared": "workspace:*",
       },
       "devDependencies": {
+        "@types/bun": "catalog:",
         "@types/node": "catalog:",
         "@typescript/native-preview": "catalog:",
         "typescript": "catalog:",

@@ -2,7 +2,8 @@
 import { createInterface } from "node:readline/promises"
 import { create as createPool, type Reason } from "@openharden/instances"
 import { create as createResolver } from "@openharden/resolver"
-import { Channel, messages, type Signal } from "@openharden/shared"
+import { create as createTelegram, type Adapter } from "@openharden/telegram"
+import { Channel, messages, type Handler, type Reply, type Signal } from "@openharden/shared"
 import { parse } from "./parser"
 import { load } from "./config"
 import * as handlers from "./handlers"
@@ -32,23 +33,31 @@ const main = async () => {
   })
 
   const deps = { pool, resolver }
-  const notify = async (msg: string) => log(`>>> ${msg}`)
 
-  const handle = async (signal: Signal): Promise<string | null> => {
+  const handle: Handler = async (signal, reply) => {
     const ctx = await resolver.resolve(signal).catch(() => null)
     if (!ctx) return messages.unbound
 
     const cmd = await parse(signal)
-    if (cmd.kind === "route") return handlers.route(deps, ctx, cmd.text, notify)
-    if (cmd.kind === "switch") return handlers.switchProject(deps, ctx, cmd.project, notify)
+    if (cmd.kind === "route") return handlers.route(deps, ctx, cmd.text, reply)
+    if (cmd.kind === "switch") return handlers.switchProject(deps, ctx, cmd.project, reply)
     if (cmd.kind === "close") return handlers.close(deps, ctx, cmd.project)
     if (cmd.kind === "list") return handlers.list(deps, ctx)
-    if (cmd.kind === "summary") return handlers.summary(deps, ctx, notify)
+    if (cmd.kind === "summary") return handlers.summary(deps, ctx, reply)
     return null
+  }
+
+  const adapters: Adapter[] = []
+  if (cfg.telegram) {
+    const tg = createTelegram(cfg.telegram)
+    await tg.start(handle)
+    adapters.push(tg)
+    log(`telegram adapter started (mode=${cfg.telegram.mode})`)
   }
 
   const shutdown = async () => {
     log("shutting down...")
+    for (const a of adapters) await a.stop().catch((err) => log(`adapter stop error: ${err}`))
     await pool.shutdown()
     process.exit(0)
   }
@@ -58,6 +67,7 @@ const main = async () => {
   log(`dev stdin loop ready. Format: <channel>:<from> <text>`)
   log(`example: telegram:123456789 trabajar en alpha`)
 
+  const stdinReply: Reply = async (text) => log(`>>> ${text}`)
   const rl = createInterface({ input: process.stdin })
   for await (const line of rl) {
     const trimmed = line.trim()
@@ -82,14 +92,15 @@ const main = async () => {
       ts: Date.now(),
     }
 
-    const response = await handle(signal).catch((err: unknown) => {
+    const response = await handle(signal, stdinReply).catch((err: unknown) => {
       log(`error: ${err instanceof Error ? err.message : String(err)}`)
       return null
     })
     if (response) log(`>>> ${response}`)
   }
 
-  log("stdin closed, shutting down pool...")
+  log("stdin closed, shutting down...")
+  for (const a of adapters) await a.stop().catch(() => {})
   await pool.shutdown()
   log("done")
 }

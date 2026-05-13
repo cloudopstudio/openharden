@@ -43,3 +43,6 @@ export const Command = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("summary") }),
 ])
 export type Command = z.infer<typeof Command>
+
+export type Reply = (text: string) => Promise<void>
+export type Handler = (signal: Signal, reply: Reply) => Promise<string | null>

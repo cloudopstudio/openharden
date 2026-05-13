@@ -1,9 +1,7 @@
 import type { Pool } from "@openharden/instances"
 import type { Resolver } from "@openharden/resolver"
-import type { Context, InstanceKey } from "@openharden/shared"
+import type { Context, InstanceKey, Reply } from "@openharden/shared"
 import { messages } from "@openharden/shared"
-
-export type Notify = (msg: string) => Promise<void>
 
 export type Deps = {
   pool: Pool
@@ -43,7 +41,7 @@ const send = async (deps: Deps, key: InstanceKey, sessionId: string, text: strin
   return extractText(result.data) ?? "(el modelo no devolvió texto)"
 }
 
-export const route = async (deps: Deps, ctx: Context, text: string, notify: Notify): Promise<string | null> => {
+export const route = async (deps: Deps, ctx: Context, text: string, notify: Reply): Promise<string | null> => {
   const inst = await deps.pool.acquire(ctx)
   if (inst.state === "spawning") {
     const first = inst.buffer.length === 0
@@ -59,7 +57,7 @@ export const route = async (deps: Deps, ctx: Context, text: string, notify: Noti
   return send(deps, inst.key, inst.sessionId, text)
 }
 
-export const switchProject = async (deps: Deps, ctx: Context, project: string, notify: Notify): Promise<string> => {
+export const switchProject = async (deps: Deps, ctx: Context, project: string, notify: Reply): Promise<string> => {
   if (project === ctx.project) return `Ya estás trabajando en el proyecto ${project}.`
   const prev = ctx.project
   await deps.resolver.switchProject(ctx.identity.id, project)
@@ -86,6 +84,6 @@ export const list = async (deps: Deps, ctx: Context): Promise<string> => {
   return messages.list(mine.map((i) => i.key.project))
 }
 
-export const summary = async (deps: Deps, ctx: Context, notify: Notify): Promise<string | null> => {
+export const summary = async (deps: Deps, ctx: Context, notify: Reply): Promise<string | null> => {
   return route(deps, ctx, "Por favor, resume brevemente nuestra conversación hasta ahora.", notify)
 }
