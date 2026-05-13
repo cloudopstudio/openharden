@@ -8,6 +8,21 @@ const Binding = z.object({
   project: z.string().optional(),
 })
 
+const Organization = z.object({
+  engramProject: z.string().optional(),
+  mcps: z.array(z.string()).default([]),
+  agents: z.array(z.string()).default([]),
+  skills: z.array(z.string()).default([]),
+})
+export type Organization = z.infer<typeof Organization>
+
+const Skill = z
+  .object({
+    path: z.string().optional(),
+    url: z.string().optional(),
+  })
+  .refine((s) => s.path || s.url, { message: "skill must declare either path or url" })
+
 const Telegram = z.discriminatedUnion("mode", [
   z.object({
     mode: z.literal("polling"),
@@ -31,6 +46,11 @@ export const Config = z.object({
   max: z.number().int().positive().default(5),
   idleMs: z.number().int().positive().default(30 * 60 * 1000),
   bindings: z.array(Binding).default([]),
+  workspaceRoot: z.string().optional(),
+  organizations: z.record(z.string(), Organization).default({}),
+  mcps: z.record(z.string(), z.record(z.string(), z.unknown())).default({}),
+  agents: z.record(z.string(), z.record(z.string(), z.unknown())).default({}),
+  skills: z.record(z.string(), Skill).default({}),
   telegram: Telegram.optional(),
 })
 export type Config = z.infer<typeof Config>

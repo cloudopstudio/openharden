@@ -7,6 +7,7 @@ export type ServerOptions = {
   signal?: AbortSignal
   timeout?: number
   config?: Config
+  cwd?: string
 }
 
 export type TuiOptions = {
@@ -33,6 +34,7 @@ export async function createOpencodeServer(options?: ServerOptions) {
 
   const proc = spawn(`opencode`, args, {
     signal: options.signal,
+    cwd: options.cwd,
     env: {
       ...process.env,
       OPENCODE_CONFIG_CONTENT: JSON.stringify(options.config ?? {}),

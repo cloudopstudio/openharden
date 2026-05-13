@@ -1,4 +1,5 @@
 import { createOpencode, type createOpencodeClient } from "@opencode-ai/sdk"
+import type { Config } from "@opencode-ai/sdk"
 import type { Context, InstanceKey } from "@openharden/shared"
 
 export type State = "spawning" | "ready" | "closing"
@@ -16,10 +17,16 @@ export type Instance = {
 
 export type Reason = "idle" | "evict" | "shutdown" | "spawn-failed"
 
+export type SpawnInput = {
+  config?: Config
+  cwd?: string
+}
+
 export type Options = {
   max: number
   idleMs: number
   onEvict?: (inst: Instance, reason: Reason) => Promise<void>
+  resolveSpawn?: (project: string) => Promise<SpawnInput | undefined> | SpawnInput | undefined
 }
 
 export type Pool = {
@@ -102,7 +109,13 @@ export const create = (opts: Options): Pool => {
     pool.set(id(key), rt)
 
     void (async () => {
-      const oc = await createOpencode({ port: 0, signal: abort.signal })
+      const spawn = opts.resolveSpawn ? await opts.resolveSpawn(ctx.project) : undefined
+      const oc = await createOpencode({
+        port: 0,
+        signal: abort.signal,
+        config: spawn?.config,
+        cwd: spawn?.cwd,
+      })
       const session = await oc.client.session.create({ body: { title: ctx.project } })
       if (session.error) {
         throw new Error(`session.create failed: ${JSON.stringify(session.error)}`)

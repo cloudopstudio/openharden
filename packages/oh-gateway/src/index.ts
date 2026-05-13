@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import path from "node:path"
 import { createInterface } from "node:readline/promises"
 import { create as createPool, type Reason } from "@openharden/instances"
 import { create as createResolver } from "@openharden/resolver"
@@ -6,15 +7,16 @@ import { create as createTelegram, type Adapter } from "@openharden/telegram"
 import { Channel, messages, type Handler, type Reply, type Signal } from "@openharden/shared"
 import { parse } from "./parser"
 import { load } from "./config"
+import { buildSpawnConfig, loadGlobalCatalog } from "./opencode-global"
 import * as handlers from "./handlers"
 
-const path = process.env.OPENHARDEN_CONFIG ?? "./openharden.config.json"
+const configPath = process.env.OPENHARDEN_CONFIG ?? "./openharden.config.json"
 
 const log = (msg: string) => console.log(`[gateway] ${msg}`)
 
 const main = async () => {
-  const cfg = await load(path)
-  log(`config loaded from ${path} (defaultProject=${cfg.defaultProject}, max=${cfg.max}, bindings=${cfg.bindings.length})`)
+  const cfg = await load(configPath)
+  log(`config loaded from ${configPath} (defaultProject=${cfg.defaultProject}, max=${cfg.max}, bindings=${cfg.bindings.length})`)
 
   const resolver = createResolver({
     defaultProject: cfg.defaultProject,
@@ -24,9 +26,52 @@ const main = async () => {
     await resolver.bind(b.channel, b.from, b.identity, b.project)
   }
 
+  const global = await loadGlobalCatalog()
+  log(
+    `global catalog loaded ` +
+      `(mcps=${Object.keys(global.mcps).length}, agents=${Object.keys(global.agents).length}, ` +
+      `skillsPaths=${global.skillsPaths.length}, skillsUrls=${global.skillsUrls.length})`,
+  )
+  log(
+    `openharden catalog ` +
+      `(mcps=${Object.keys(cfg.mcps).length}, agents=${Object.keys(cfg.agents).length}, ` +
+      `skills=${Object.keys(cfg.skills).length})`,
+  )
+  const orgNames = Object.keys(cfg.organizations)
+  log(`organizations configured: ${orgNames.length} (${orgNames.join(", ") || "none"})`)
+  if (cfg.workspaceRoot) log(`workspace root: ${cfg.workspaceRoot}`)
+
+  const own = { mcps: cfg.mcps, agents: cfg.agents, skills: cfg.skills }
+
+  const orgFor = (folder: string): string | null => {
+    const idx = folder.indexOf("-")
+    if (idx <= 0) return null
+    const candidate = folder.slice(0, idx)
+    return cfg.organizations[candidate] ? candidate : null
+  }
+
   const pool = createPool({
     max: cfg.max,
     idleMs: cfg.idleMs,
+    resolveSpawn: (project) => {
+      const org = orgFor(project)
+      const orgCfg = org ? cfg.organizations[org] : null
+      const cwd = cfg.workspaceRoot ? path.join(cfg.workspaceRoot, project) : undefined
+      if (!orgCfg) {
+        if (cwd) log(`spawn ${project}: no org match, cwd=${cwd}`)
+        return cwd ? { cwd } : undefined
+      }
+      const { config, summary } = buildSpawnConfig(global, own, orgCfg)
+      const parts: string[] = [`org=${org}`]
+      if (summary.mcpsDisabled.length) parts.push(`mcps off: ${summary.mcpsDisabled.join(",")}`)
+      if (summary.mcpsAdded.length) parts.push(`mcps add: ${summary.mcpsAdded.join(",")}`)
+      if (summary.agentsDisabled.length) parts.push(`agents off: ${summary.agentsDisabled.join(",")}`)
+      if (summary.agentsAdded.length) parts.push(`agents add: ${summary.agentsAdded.join(",")}`)
+      if (summary.skillsAdded.length) parts.push(`skills add: ${summary.skillsAdded.join(",")}`)
+      if (cwd) parts.push(`cwd=${cwd}`)
+      log(`spawn ${project}: ${parts.join(" | ")}`)
+      return { config, cwd }
+    },
     onEvict: async (inst, reason: Reason) => {
       log(`evicted ${inst.key.project} (${reason})`)
     },
