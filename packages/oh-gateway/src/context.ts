@@ -59,9 +59,9 @@ export const create = (opts: Options): Context => {
       await save(projectFor(identity), `session/${folder}`, body, "session")
     },
     async listProjects() {
-      const r = await exec(binary, [...profileArgs, "projects"])
+      const r = await exec(binary, [...profileArgs, "projects", "list"])
       if (r.code !== 0) {
-        throw new Error(`engram projects failed (code=${r.code}): ${r.stderr.trim() || r.stdout.trim()}`)
+        throw new Error(`engram projects list failed (code=${r.code}): ${r.stderr.trim() || r.stdout.trim()}`)
       }
       return parseProjectNames(r.stdout)
     },
@@ -70,15 +70,15 @@ export const create = (opts: Options): Context => {
 
 const parseProjectNames = (output: string): string[] => {
   const names: string[] = []
+  const rowPattern = /^(.+?)\s{2,}\d+\s+(?:obs|observation)/
   for (const line of output.split("\n")) {
-    const trimmed = line.trim()
-    if (!trimmed) continue
-    if (trimmed.startsWith("Update available")) continue
-    if (trimmed.startsWith("To update")) continue
-    if (trimmed.startsWith("engram v")) continue
-    const first = trimmed.split(/[\s│|]+/)[0]
-    if (!first) continue
-    if (/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(first)) names.push(first)
+    if (!line.trim()) continue
+    const m = line.match(rowPattern)
+    if (!m) continue
+    const name = m[1]?.trim()
+    if (!name) continue
+    if (name.toLowerCase().startsWith("projects ")) continue
+    names.push(name)
   }
   return Array.from(new Set(names)).sort()
 }

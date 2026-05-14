@@ -203,7 +203,21 @@ const main = async () => {
     } else if (dispatcher) {
       const currentState = await stateFor(identity)
       const folders = await listFolders()
-      const engramProjects = await context.listProjects().catch(() => [])
+      const engramProjects = await context.listProjects().catch((err: unknown) => {
+        logWarn(`engram listProjects failed: ${err instanceof Error ? err.message : String(err)}`)
+        return [] as string[]
+      })
+      if (engramProjects.length === 0) {
+        logWarn(
+          `engram projects list is empty. ` +
+            `Check that engram.binary='${cfg.engram?.binary ?? "engram"}' ` +
+            `and engram.profile='${cfg.engram?.profile ?? "(default)"}' ` +
+            `point to the database you actually use. Try running the command manually: ` +
+            `${cfg.engram?.binary ?? "engram"} ${cfg.engram?.profile ? `--profile ${cfg.engram.profile} ` : ""}projects`,
+        )
+      } else {
+        emit("debug", "gateway", `engram projects (${engramProjects.length}): ${engramProjects.join(", ")}`)
+      }
       const history = historyByIdentity.get(identity) ?? []
       const decision = await dispatcher.decide({
         message: signal.text,
