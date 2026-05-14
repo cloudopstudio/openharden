@@ -16,7 +16,19 @@ import * as handlers from "./handlers"
 
 const configPath = process.env.OPENHARDEN_CONFIG ?? "./openharden.config.json"
 
-const log = (msg: string) => console.log(`[gateway] ${msg}`)
+type ConsoleLevel = "debug" | "info" | "warn" | "error"
+const LEVEL_ORDER: Record<ConsoleLevel, number> = { debug: 0, info: 1, warn: 2, error: 3 }
+const consoleLevel = ((process.env.OPENHARDEN_LOG_LEVEL ?? "info").toLowerCase() as ConsoleLevel)
+const consoleThreshold = LEVEL_ORDER[consoleLevel] ?? LEVEL_ORDER.info
+
+const emit = (level: ConsoleLevel, source: string, msg: string) => {
+  if (LEVEL_ORDER[level] < consoleThreshold) return
+  const tag = level === "info" ? "" : `[${level}] `
+  console.log(`[${source}] ${tag}${msg}`)
+}
+
+const log = (msg: string) => emit("info", "gateway", msg)
+const logWarn = (msg: string) => emit("warn", "gateway", msg)
 
 const main = async () => {
   const cfg = await load(configPath)
@@ -111,14 +123,16 @@ const main = async () => {
       dispatcher = await createDispatcher({
         model: cfg.dispatcher?.model ?? "openai/gpt-5-mini",
         workspaceRoot: cfg.workspaceRoot,
+        onLog: (level, msg) => emit(level, "dispatcher", msg),
       })
       log(`dispatcher ready (model=${cfg.dispatcher?.model ?? "openai/gpt-5-mini"})`)
     } catch (err) {
-      log(`dispatcher failed to start: ${err instanceof Error ? err.message : String(err)}`)
+      logWarn(`dispatcher failed to start: ${err instanceof Error ? err.message : String(err)}`)
     }
   } else if (!cfg.workspaceRoot) {
     log(`dispatcher disabled: no workspaceRoot configured`)
   }
+  log(`console log level=${consoleLevel} (set OPENHARDEN_LOG_LEVEL=debug for verbose)`)
 
   const historyMax = (cfg.dispatcher?.historyTurns ?? 10) * 2
   const historyByIdentity = new Map<string, HistoryTurn[]>()

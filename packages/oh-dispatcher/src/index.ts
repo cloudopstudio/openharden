@@ -28,10 +28,14 @@ export type Decision = {
   message: string | null
 }
 
+export type LogLevel = "debug" | "info" | "warn" | "error"
+export type LogFn = (level: LogLevel, msg: string) => void
+
 export type Options = {
   model: string
   workspaceRoot?: string
   signal?: AbortSignal
+  onLog?: LogFn
 }
 
 export type Dispatcher = {
@@ -51,11 +55,51 @@ const extractText = (data: unknown): string | null => {
   if (!data || typeof data !== "object") return null
   const parts = (data as Record<string, unknown>).parts
   if (!Array.isArray(parts)) return null
-  const texts = parts
-    .filter((p): p is Record<string, unknown> => p && typeof p === "object" && (p as Record<string, unknown>).type === "text")
-    .map((p) => p.text)
-    .filter((t): t is string => typeof t === "string" && t.length > 0)
+  const texts: string[] = []
+  for (const p of parts) {
+    if (!p || typeof p !== "object") continue
+    const part = p as Record<string, unknown>
+    if (part.type === "text" && typeof part.text === "string" && part.text.length > 0) {
+      texts.push(part.text)
+    }
+  }
   return texts.length > 0 ? texts.join("\n") : null
+}
+
+const summarizeParts = (data: unknown): string => {
+  if (!data || typeof data !== "object") return "(no data)"
+  const parts = (data as Record<string, unknown>).parts
+  if (!Array.isArray(parts)) return `(no parts; keys=${Object.keys(data).join(",")})`
+  const summary = parts.map((p, i) => {
+    if (!p || typeof p !== "object") return `[${i}] ?`
+    const part = p as Record<string, unknown>
+    const type = part.type ?? "unknown"
+    if (type === "text") {
+      const txt = typeof part.text === "string" ? part.text : ""
+      return `[${i}] text(len=${txt.length})${txt.length > 0 ? `: ${txt.slice(0, 80)}` : ""}`
+    }
+    if (type === "reasoning") {
+      const txt = typeof part.text === "string" ? part.text : ""
+      return `[${i}] reasoning(len=${txt.length})`
+    }
+    if (type === "tool") {
+      const name = typeof part.tool === "string" ? part.tool : "?"
+      return `[${i}] tool(${name})`
+    }
+    return `[${i}] ${type}`
+  })
+  return summary.join(" | ")
+}
+
+const extractInfoError = (data: unknown): string | null => {
+  if (!data || typeof data !== "object") return null
+  const info = (data as Record<string, unknown>).info as Record<string, unknown> | undefined
+  if (!info || !info.error || typeof info.error !== "object") return null
+  const err = info.error as Record<string, unknown>
+  const name = typeof err.name === "string" ? err.name : "error"
+  const payload = err.data as Record<string, unknown> | undefined
+  const message = payload && typeof payload.message === "string" ? payload.message : null
+  return message ? `[${name}] ${message}` : `[${name}]`
 }
 
 const tryParseDecision = (text: string): Decision | null => {
@@ -90,6 +134,7 @@ const unknown = (message: string): Decision => ({
 
 export const create = async (opts: Options): Promise<Dispatcher> => {
   const model = parseModel(opts.model)
+  const log: LogFn = opts.onLog ?? (() => {})
   const oc = await createOpencode({
     port: 0,
     signal: opts.signal,
@@ -102,10 +147,12 @@ export const create = async (opts: Options): Promise<Dispatcher> => {
     throw new Error(`dispatcher session.create failed: ${JSON.stringify(session.error)}`)
   }
   const sessionId = session.data.id
+  log("info", `session ready id=${sessionId} model=${opts.model}`)
 
   return {
     async decide(input) {
       const payload = JSON.stringify(input)
+      log("debug", `payload: ${payload.length > 800 ? payload.slice(0, 800) + "...(truncated)" : payload}`)
       const r = await oc.client.session.prompt({
         path: { id: sessionId },
         body: {
@@ -114,11 +161,29 @@ export const create = async (opts: Options): Promise<Dispatcher> => {
           parts: [{ type: "text", text: payload }],
         },
       })
-      if (r.error) return unknown(`Dispatcher transport error: ${JSON.stringify(r.error)}`)
+      if (r.error) {
+        const msg = `transport error: ${JSON.stringify(r.error)}`
+        log("warn", msg)
+        return unknown(`Dispatcher ${msg}`)
+      }
+      const providerErr = extractInfoError(r.data)
+      if (providerErr) {
+        log("warn", `provider error: ${providerErr}`)
+        return unknown(`Dispatcher provider error: ${providerErr}`)
+      }
       const text = extractText(r.data)
-      if (!text) return unknown("Dispatcher devolvió respuesta vacía.")
+      if (!text) {
+        const summary = summarizeParts(r.data)
+        log("warn", `empty text response. parts: ${summary}`)
+        return unknown(`Dispatcher sin texto. Parts: ${summary}`)
+      }
+      log("debug", `raw text: ${text.length > 400 ? text.slice(0, 400) + "...(truncated)" : text}`)
       const decision = tryParseDecision(text)
-      if (!decision) return unknown(`Dispatcher devolvió formato inválido: ${text.slice(0, 120)}`)
+      if (!decision) {
+        log("warn", `invalid format. raw text: ${text.slice(0, 400)}`)
+        return unknown(`Dispatcher devolvió formato inválido: ${text.slice(0, 200)}`)
+      }
+      log("info", `decision action=${decision.action} folder=${decision.folder ?? "-"} engram=${decision.engramProject ?? "-"}`)
       return decision
     },
     async shutdown() {
