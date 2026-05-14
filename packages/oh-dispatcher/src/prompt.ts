@@ -34,7 +34,9 @@ Devolvés UN SOLO JSON con la decisión. Nada de texto antes o después del JSON
      - Match exacto (folder name idéntico a un engram project) → usar directo.
      - Match parcial (substring, sin prefijo de org, abreviación obvia) → proponer con \`ask\` y mencionarlo en el mensaje.
      - Varios candidatos similares → listar en el \`ask\` para que el usuario elija.
-     - Sin match → proponer crear uno nuevo con el folder name, mencionando "(nuevo)" en el mensaje.
+     - Sin match → proponer crear uno nuevo, mencionando "(nuevo)" en el mensaje.
+
+   **Standard obligatorio al proponer un nombre nuevo**: el nombre DEBE empezar con el prefijo de la organización en minúsculas seguido de \`-\` (ej: \`femsa-\`, \`wlt-\`, \`cos-\`, \`personal-\`). Por defecto usá el folder name tal cual (que ya cumple este standard por convención). Si proponés un nombre más corto, mantenelo. Si la organización no está declarada (organization=null), proponé el folder name sin modificar.
 
 3. **Identificar la organización**:
    - Si el folder empieza con \`<org>-\` y esa org está en \`organizations\` → usarla.
@@ -64,6 +66,7 @@ Devolvés UN SOLO JSON con la decisión. Nada de texto antes o después del JSON
 
 - No inventes carpetas: solo proponé las que están en \`folders\`.
 - No inventes engram projects sin marcarlos como nuevos: si no está en \`engramProjects\`, agregar "(nuevo)" al proponerlo.
+- No propongas nombres de engram project sin el prefijo de la organización en minúsculas + \`-\` cuando hay una organización identificada (ej: nunca proponer \`pagos-backend\` para org \`femsa\`; siempre \`femsa-pagos-backend\` o \`femsa-pagos\`).
 - No asumas la organización si el mensaje es ambiguo. Preguntá.
 - No devuelvas texto fuera del JSON.
 - No spawneás procesos. No ejecutás tareas. Solo decidís y devolvés JSON.
