@@ -94,8 +94,14 @@ const dispatch = async (token: string, handler: Handler, sig: Signal, reply: Rep
   }
 }
 
+const isBenignTimeout = (err: unknown): boolean => {
+  if (!err || typeof err !== "object") return false
+  const name = (err as { name?: unknown }).name
+  return name === "TimeoutError" || name === "AbortError"
+}
+
 const polling = (opts: Extract<Options, { mode: "polling" }>): Adapter => {
-  const timeoutSec = opts.pollTimeoutSec ?? 50
+  const timeoutSec = opts.pollTimeoutSec ?? 25
   const backoff = opts.backoffMs ?? 1000
   let offset = 0
   let stopped = false
@@ -127,6 +133,7 @@ const polling = (opts: Extract<Options, { mode: "polling" }>): Adapter => {
         }
       } catch (err) {
         if (stopped) return
+        if (isBenignTimeout(err)) continue
         console.error("[telegram] poll error:", err)
         await sleep(backoff)
       }
