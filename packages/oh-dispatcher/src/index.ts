@@ -32,7 +32,7 @@ export type LogLevel = "debug" | "info" | "warn" | "error"
 export type LogFn = (level: LogLevel, msg: string) => void
 
 export type Options = {
-  model: string
+  model?: string
   workspaceRoot?: string
   signal?: AbortSignal
   onLog?: LogFn
@@ -133,7 +133,7 @@ const unknown = (message: string): Decision => ({
 })
 
 export const create = async (opts: Options): Promise<Dispatcher> => {
-  const model = parseModel(opts.model)
+  const model = opts.model && opts.model.trim() ? parseModel(opts.model) : undefined
   const log: LogFn = opts.onLog ?? (() => {})
   const oc = await createOpencode({
     port: 0,
@@ -147,20 +147,22 @@ export const create = async (opts: Options): Promise<Dispatcher> => {
     throw new Error(`dispatcher session.create failed: ${JSON.stringify(session.error)}`)
   }
   const sessionId = session.data.id
-  log("info", `session ready id=${sessionId} model=${opts.model}`)
+  log("info", `session ready id=${sessionId} model=${model ? `${model.providerID}/${model.modelID}` : "(opencode default)"}`)
 
   return {
     async decide(input) {
       const payload = JSON.stringify(input)
       log("debug", `payload: ${payload.length > 800 ? payload.slice(0, 800) + "...(truncated)" : payload}`)
+      const body: Record<string, unknown> = {
+        system: SYSTEM_PROMPT,
+        parts: [{ type: "text", text: payload }],
+      }
+      if (model) body.model = model
       const r = await oc.client.session.prompt({
         path: { id: sessionId },
-        body: {
-          model,
-          system: SYSTEM_PROMPT,
-          parts: [{ type: "text", text: payload }],
-        },
+        body: body as never,
       })
+      log("debug", `raw response: ${JSON.stringify({ error: r.error, data: r.data }).slice(0, 1500)}`)
       if (r.error) {
         const msg = `transport error: ${JSON.stringify(r.error)}`
         log("warn", msg)
@@ -174,8 +176,10 @@ export const create = async (opts: Options): Promise<Dispatcher> => {
       const text = extractText(r.data)
       if (!text) {
         const summary = summarizeParts(r.data)
-        log("warn", `empty text response. parts: ${summary}`)
-        return unknown(`Dispatcher sin texto. Parts: ${summary}`)
+        const dump = JSON.stringify(r.data).slice(0, 1500)
+        log("warn", `empty text response. parts summary: ${summary}`)
+        log("warn", `full response data dump: ${dump}`)
+        return unknown(`Dispatcher sin texto. Revisá logs del daemon (parts: ${summary}).`)
       }
       log("debug", `raw text: ${text.length > 400 ? text.slice(0, 400) + "...(truncated)" : text}`)
       const decision = tryParseDecision(text)

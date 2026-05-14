@@ -30,7 +30,7 @@ export type Logging = z.infer<typeof Logging>
 
 const Dispatcher = z.object({
   enabled: z.boolean().default(true),
-  model: z.string().default("openai/gpt-5-mini"),
+  model: z.string().optional(),
   historyTurns: z.number().int().positive().default(10),
 })
 export type Dispatcher = z.infer<typeof Dispatcher>

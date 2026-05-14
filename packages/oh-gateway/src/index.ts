@@ -121,11 +121,11 @@ const main = async () => {
   if (cfg.dispatcher?.enabled !== false && cfg.workspaceRoot) {
     try {
       dispatcher = await createDispatcher({
-        model: cfg.dispatcher?.model ?? "openai/gpt-5-mini",
+        model: cfg.dispatcher?.model,
         workspaceRoot: cfg.workspaceRoot,
         onLog: (level, msg) => emit(level, "dispatcher", msg),
       })
-      log(`dispatcher ready (model=${cfg.dispatcher?.model ?? "openai/gpt-5-mini"})`)
+      log(`dispatcher ready (model=${cfg.dispatcher?.model ?? "(opencode default)"})`)
     } catch (err) {
       logWarn(`dispatcher failed to start: ${err instanceof Error ? err.message : String(err)}`)
     }
