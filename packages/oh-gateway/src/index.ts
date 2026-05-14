@@ -11,6 +11,7 @@ import { parse } from "./parser"
 import { load } from "./config"
 import { buildSpawnConfig, loadGlobalCatalog } from "./opencode-global"
 import { create as createLogger } from "./logging"
+import { create as createContext, disabled as disabledContext, type Context } from "./context"
 import * as handlers from "./handlers"
 
 const configPath = process.env.OPENHARDEN_CONFIG ?? "./openharden.config.json"
@@ -26,6 +27,15 @@ const main = async () => {
     path: cfg.logging?.path,
   })
   log(`logging level=${logger.level} path=${logger.path}`)
+
+  const context: Context = cfg.engram?.enabled === false
+    ? disabledContext()
+    : createContext({ binary: cfg.engram?.binary, profile: cfg.engram?.profile })
+  log(
+    context.enabled
+      ? `context persistence enabled (binary=${cfg.engram?.binary ?? "engram"}${cfg.engram?.profile ? ", profile=" + cfg.engram.profile : ""})`
+      : `context persistence disabled`,
+  )
 
   const resolver = createResolver({
     defaultProject: cfg.defaultProject,
@@ -62,6 +72,16 @@ const main = async () => {
   const pool = createPool({
     max: cfg.max,
     idleMs: cfg.idleMs,
+    onEvict: async (inst, reason) => {
+      log(`evicted ${inst.key.project} (${reason})`)
+      if (context.enabled && reason === "idle") {
+        await context
+          .saveSession(inst.key.identity, inst.key.project, `closed by ${reason}`)
+          .catch((err: unknown) =>
+            log(`context saveSession failed: ${err instanceof Error ? err.message : String(err)}`),
+          )
+      }
+    },
     resolveSpawn: (project) => {
       const org = orgFor(project)
       const orgCfg = org ? cfg.organizations[org] : null
@@ -80,9 +100,6 @@ const main = async () => {
       if (cwd) parts.push(`cwd=${cwd}`)
       log(`spawn ${project}: ${parts.join(" | ")}`)
       return { config, cwd }
-    },
-    onEvict: async (inst, reason: Reason) => {
-      log(`evicted ${inst.key.project} (${reason})`)
     },
   })
 
@@ -205,6 +222,19 @@ const main = async () => {
       if (decision.action === "switch" && decision.folder) {
         await resolver.switchProject(identity, decision.folder)
         await deps.pool.close({ identity, project: ctx.project }).catch(() => null)
+        await context
+          .saveState(
+            identity,
+            {
+              folder: decision.folder,
+              organization: decision.organization,
+              engramProject: decision.engramProject,
+            },
+            "dispatcher",
+          )
+          .catch((err: unknown) =>
+            log(`context saveState failed: ${err instanceof Error ? err.message : String(err)}`),
+          )
         response = decision.message ?? messages.spawned(decision.folder)
       } else if (decision.action === "route") {
         const folder = decision.folder ?? currentState.folder

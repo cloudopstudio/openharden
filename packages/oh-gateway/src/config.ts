@@ -36,6 +36,13 @@ const Dispatcher = z.object({
 })
 export type Dispatcher = z.infer<typeof Dispatcher>
 
+const Engram = z.object({
+  enabled: z.boolean().default(true),
+  binary: z.string().default("engram"),
+  profile: z.string().optional(),
+})
+export type Engram = z.infer<typeof Engram>
+
 const Telegram = z.discriminatedUnion("mode", [
   z.object({
     mode: z.literal("polling"),
@@ -66,6 +73,7 @@ export const Config = z.object({
   skills: z.record(z.string(), Skill).default({}),
   logging: Logging.optional(),
   dispatcher: Dispatcher.optional(),
+  engram: Engram.optional(),
   telegram: Telegram.optional(),
 })
 export type Config = z.infer<typeof Config>
