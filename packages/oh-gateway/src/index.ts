@@ -149,19 +149,14 @@ const main = async () => {
     if (!current || current === cfg.defaultProject) {
       return { organization: null, folder: null, engramProject: null }
     }
-    const org = orgFromFolder(current)
     return {
-      organization: org,
+      organization: orgFromFolder(current),
       folder: current,
-      engramProject: org ? (cfg.organizations[org]?.engramProject ?? null) : null,
+      engramProject: current,
     }
   }
 
-  const orgList = () =>
-    Object.entries(cfg.organizations).map(([name, c]) => ({
-      name,
-      engramProject: c.engramProject ?? null,
-    }))
+  const orgList = () => Object.keys(cfg.organizations).map((name) => ({ name }))
 
   const handle: Handler = async (signal, reply) => {
     const ctx = await resolver.resolve(signal).catch(() => null)
@@ -194,12 +189,14 @@ const main = async () => {
     } else if (dispatcher) {
       const currentState = await stateFor(identity)
       const folders = await listFolders()
+      const engramProjects = await context.listProjects().catch(() => [])
       const history = historyByIdentity.get(identity) ?? []
       const decision = await dispatcher.decide({
         message: signal.text,
         currentState,
         organizations: orgList(),
         folders,
+        engramProjects,
         history,
       })
       await logger

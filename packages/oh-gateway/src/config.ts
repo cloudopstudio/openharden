@@ -9,7 +9,6 @@ const Binding = z.object({
 })
 
 const Organization = z.object({
-  engramProject: z.string().optional(),
   mcps: z.array(z.string()).default([]),
   agents: z.array(z.string()).default([]),
   skills: z.array(z.string()).default([]),

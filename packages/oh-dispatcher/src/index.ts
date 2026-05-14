@@ -1,7 +1,7 @@
 import { createOpencode } from "@opencode-ai/sdk"
 import { SYSTEM_PROMPT } from "./prompt"
 
-export type Organization = { name: string; engramProject: string | null }
+export type Organization = { name: string }
 
 export type CurrentState = {
   organization: string | null
@@ -16,6 +16,7 @@ export type DispatchInput = {
   currentState: CurrentState
   organizations: Organization[]
   folders: string[]
+  engramProjects: string[]
   history: HistoryTurn[]
 }
 

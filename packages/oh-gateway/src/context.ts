@@ -15,6 +15,7 @@ export type Context = {
   enabled: boolean
   saveState(identity: string, state: StateSnapshot, source: string): Promise<void>
   saveSession(identity: string, folder: string, detail: string): Promise<void>
+  listProjects(): Promise<string[]>
 }
 
 const projectFor = (identity: string): string => `${identity}_root`
@@ -57,11 +58,36 @@ export const create = (opts: Options): Context => {
       const body = JSON.stringify({ folder, detail, ts: new Date().toISOString() })
       await save(projectFor(identity), `session/${folder}`, body, "session")
     },
+    async listProjects() {
+      const r = await exec(binary, [...profileArgs, "projects"])
+      if (r.code !== 0) {
+        throw new Error(`engram projects failed (code=${r.code}): ${r.stderr.trim() || r.stdout.trim()}`)
+      }
+      return parseProjectNames(r.stdout)
+    },
   }
+}
+
+const parseProjectNames = (output: string): string[] => {
+  const names: string[] = []
+  for (const line of output.split("\n")) {
+    const trimmed = line.trim()
+    if (!trimmed) continue
+    if (trimmed.startsWith("Update available")) continue
+    if (trimmed.startsWith("To update")) continue
+    if (trimmed.startsWith("engram v")) continue
+    const first = trimmed.split(/[\s│|]+/)[0]
+    if (!first) continue
+    if (/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(first)) names.push(first)
+  }
+  return Array.from(new Set(names)).sort()
 }
 
 export const disabled = (): Context => ({
   enabled: false,
   async saveState() {},
   async saveSession() {},
+  async listProjects() {
+    return []
+  },
 })
